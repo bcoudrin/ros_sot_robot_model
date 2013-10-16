@@ -45,6 +45,10 @@ namespace dynamicgraph
     void loadFromParameterServer();
     Vector curConf() const;
 
+    void addJointMapping(const std::string& link, const std::string& repName);
+    void displayChain(const std::string& fromJoint, const std::string &toJoint);
+    void jointTransformation(const std::string& jointName);
+
   protected:
 
     unsigned getDimension () const
@@ -61,6 +65,9 @@ namespace dynamicgraph
 
     /// \brief Name of the controller namespace
     std::string ns_;
+
+    /// \brief Special joints map for the parser
+    std::map<std::string, std::string> specialJoints_;
 
 
   };

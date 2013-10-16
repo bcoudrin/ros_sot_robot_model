@@ -17,7 +17,7 @@ namespace dynamicgraph
 
 RosSotRobotModel::RosSotRobotModel(const std::string& name)
     : Dynamic(name,false),
-      jointsParameterName_("jrl_joints_list"),
+      jointsParameterName_("jrl_map"),
       ns_("sot_controller")
 {
     std::string docstring;
@@ -47,6 +47,24 @@ RosSotRobotModel::RosSotRobotModel(const std::string& name)
             "  Get current configuration of the robot.\n"
             "\n";
     addCommand ("curConf", new command::Getter<RosSotRobotModel,Vector> (*this,&RosSotRobotModel::curConf,docstring));
+
+    docstring =
+            "\n"
+            "  Maps a link name in the URDF parser to actual robot link name.\n"
+            "\n";
+    addCommand ("addJointMapping", command::makeCommandVoid2(*this,&RosSotRobotModel::addJointMapping,docstring));
+
+    docstring =
+            "\n"
+            "  Displays the chain between to joints.\n"
+            "\n";
+    addCommand ("displayChain", command::makeCommandVoid2(*this,&RosSotRobotModel::displayChain,docstring));
+
+    docstring =
+            "\n"
+            "  Displays the the current transformation of a joint.\n"
+            "\n";
+    addCommand ("jointTransformation", command::makeCommandVoid1(*this,&RosSotRobotModel::jointTransformation,docstring));
 }
 
 RosSotRobotModel::~RosSotRobotModel()
@@ -55,6 +73,11 @@ RosSotRobotModel::~RosSotRobotModel()
 void RosSotRobotModel::loadUrdf (const std::string& filename)
 {
     jrl::dynamics::urdf::Parser parser;
+
+    std::map<std::string, std::string>::const_iterator it = specialJoints_.begin();
+    for (;it!=specialJoints_.end();++it) {
+        parser.specifyREPName(it->first, it->second);
+    }
 
     m_HDR = parser.parse(filename);
 
@@ -72,9 +95,14 @@ void RosSotRobotModel::loadFromParameterServer()
 {
     jrl::dynamics::urdf::Parser parser;
 
+    std::map<std::string, std::string>::const_iterator it = specialJoints_.begin();
+    for (;it!=specialJoints_.end();++it) {
+        parser.specifyREPName(it->first, it->second);
+    }
+
     rosInit (false);
     std::string robotDescription;
-    ros::param::param<std::string> (ns_ + "/robot_description", robotDescription, "");
+    ros::param::param<std::string> ("/robot_description", robotDescription, "");
 
     if (robotDescription.empty ())
         throw std::runtime_error("No model available as ROS parameter. Fail.");
@@ -147,6 +175,53 @@ Vector RosSotRobotModel::curConf() const
             res(i) = static_cast<double>(ffpose[i]);
 
         return res;
+    }
+}
+
+void
+RosSotRobotModel::addJointMapping(const std::string &link, const std::string &repName)
+{
+    specialJoints_[link] = repName;
+}
+
+void
+RosSotRobotModel::displayChain(const std::string& fromJoint, const std::string &toJoint) {
+    std::vector<CjrlJoint*> ljoints = m_HDR->jointVector();
+
+    matrix4d tf;
+    tf.setIdentity();
+    std::vector<CjrlJoint*>::const_iterator it=ljoints.begin();
+    for (;it!=ljoints.end();++it) {
+        if ((*it)->getName() == toJoint) {
+            std::cout << (*it)->getName() << " <-- ";
+            tf = (*it)->currentTransformation() * tf;
+            CjrlJoint *parent = (*it)->parentJoint();
+            while (parent && parent->getName() != fromJoint) {
+                std::cout << parent->getName() << " <-- ";
+                tf = parent->currentTransformation() * tf;
+                parent = parent->parentJoint();
+            }
+            if (parent) {
+                tf = parent->currentTransformation() * tf;
+                std::cout << parent->getName();
+            }
+            std::cout << std::endl;
+
+            std::cout << tf << std::endl;
+            break;
+        }
+    }
+}
+
+void
+RosSotRobotModel::jointTransformation(const std::string& jointName) {
+    std::vector<CjrlJoint*> ljoints = m_HDR->jointVector();
+
+    std::vector<CjrlJoint*>::const_iterator it=ljoints.begin();
+    for (;it!=ljoints.end();++it) {
+        if ((*it)->getName() == jointName) {
+            std::cout << (*it)->currentTransformation() << std::endl;
+        }
     }
 }
 
